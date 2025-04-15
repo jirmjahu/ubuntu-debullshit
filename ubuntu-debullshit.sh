@@ -73,20 +73,22 @@ setup_vanilla_gnome() {
     apt install vanilla-gnome-desktop gnome-session -y
 
     # Reset gnome settings
-    gsettings reset-recursively org.gnome.desktop.interface
-    gsettings reset-recursively org.gnome.desktop.background
-    gsettings reset-recursively org.gnome.desktop.screensaver
-    gsettings reset-recursively org.gnome.desktop.wm.preferences
-    gsettings reset-recursively org.gnome.shell
-    gsettings reset-recursively org.gnome.nautilus.preferences
-    gsettings reset-recursively org.gnome.nautilus.list-view
-    gsettings reset-recursively org.gnome.desktop.input-sources
-    gsettings reset-recursively org.gnome.desktop.peripherals.keyboard
-    gsettings reset-recursively org.gnome.desktop.interface gtk-theme
-    gsettings reset-recursively org.gnome.desktop.interface icon-theme
-    gsettings reset-recursively org.gnome.desktop.interface font-name
-    gsettings reset-recursively org.gnome.desktop.interface monospace-font-name
-    gsettings reset-recursively org.gnome.desktop.interface cursor-theme
+    dconf reset -f /org/gnome/
+
+    # Setup adwaita fonts (prob not the best method)
+    FONT_TMP=$(mktemp -d)
+    FONT_DIR="/home/$(logname)/.local/share/fonts/adwaita"
+    mkdir -p "$FONT_DIR"
+    curl -L https://gitlab.gnome.org/GNOME/adwaita-fonts/-/archive/48.2/adwaita-fonts-48.2.tar.gz -o "$FONT_TMP/adwaita.tar.gz"
+    tar -xf "$FONT_TMP/adwaita.tar.gz" -C "$FONT_TMP"
+    cp "$FONT_TMP"/adwaita-fonts-48.2/*.ttf "$FONT_DIR"
+    rm -rf "$FONT_TMP"
+    sudo -u "$(logname)" fc-cache -fv "$FONT_DIR"
+
+    gsettings_wrapper set org.gnome.desktop.interface font-name "Adwaita Sans 11"
+    gsettings_wrapper set org.gnome.desktop.interface document-font-name "Adwaita Sans 11"
+    gsettings_wrapper set org.gnome.desktop.wm.preferences titlebar-font "Adwaita Sans Bold 11"
+    gsettings_wrapper set org.gnome.desktop.interface monospace-font-name "Adwaita Mono 11"
 }
 
 restore_firefox() {
@@ -125,6 +127,7 @@ EOF
 
 replace_desktop() {
     echo
+    echo "Important: Run the script in a TTY (Ctrl + Alt + F3) to avoid bugs"
     read -p "Do you want to remove the Ubuntu Desktop (GNOME + Yaru)? (y/n): " rm_ubuntu_desktop
     if [[ "$rm_ubuntu_desktop" == "y" || "$rm_ubuntu_desktop" == "Y" ]]; then
         remove_ubuntu_desktop
