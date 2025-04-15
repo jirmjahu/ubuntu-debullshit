@@ -65,17 +65,28 @@ gsettings_wrapper() {
 }
 
 remove_ubuntu_desktop() {
-    apt remove ubuntu-session yaru-theme-* gnome-shell-extension-ubuntu-dock -y
+    apt purge ubuntu-session yaru-theme-* gnome-shell-extension-ubuntu-dock -y
+    apt purge gnome-shell gnome-session gnome-control-center gnome-settings-daemon gnome-terminal gnome-software
+    apt purge libgnome* gnome-* libgtk* libgnomecanvas*
+    apt autoremove --purge
+    apt clean
+
+    rm -rf ~/.gnome*
+    rm -rf ~/.gconf*
+    rm -rf ~/.config/dconf
+    rm -rf ~/.local/share/gnome*
+    rm -rf ~/.local/share/gnome-shell
+    rm -rf ~/.cache/gnome*
+    rm -rf ~/.themes
+    rm -rf ~/.icons
 }
 
 setup_vanilla_gnome() {
     apt install qgnomeplatform-qt5 qgnomeplatform-qt6 -y
     apt install vanilla-gnome-desktop gnome-session -y
-
-    # Reset gnome settings
-    dconf reset -f /org/gnome/
-
+   
     # Setup adwaita fonts (prob not the best method)
+    apt install curl -y
     FONT_TMP=$(mktemp -d)
     FONT_DIR="/home/$(logname)/.local/share/fonts/adwaita"
     mkdir -p "$FONT_DIR"
