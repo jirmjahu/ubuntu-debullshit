@@ -32,7 +32,7 @@ I recommend a minimal install of Ubuntu 23.04 to run this.
 
 You can download the script from the repo or use this oneliner command, there are no dependencies required.
 
-`sudo bash -c "$(wget -qO- https://raw.githubusercontent.com/polkaulfield/ubuntu-debullshit/main/ubuntu-debullshit.sh)"`
+`sudo bash -c "$(wget -qO- https://raw.githubusercontent.com/jirmjahu/ubuntu-debullshit/main/ubuntu-debullshit.sh)"`
 
 After the install, reboot and enjoy a clean experience :)
 
