@@ -66,8 +66,9 @@ gsettings_wrapper() {
 
 remove_ubuntu_desktop() {
     apt purge ubuntu-session yaru-theme-* gnome-shell-extension-ubuntu-dock -y
-    apt purge gnome-shell gnome-session gnome-control-center gnome-settings-daemon gnome-terminal gnome-software
-    apt purge libgnome* gnome-* libgtk* libgnomecanvas*
+    apt purge gnome-shell gnome-session gnome-control-center gnome-settings-daemon gnome-terminal gnome-software -y
+    apt purge libgnome* gnome-* libgtk* libgnomecanvas* -y
+    apt purge gnome-shell-extension-* -y
     apt autoremove --purge
     apt clean
 
