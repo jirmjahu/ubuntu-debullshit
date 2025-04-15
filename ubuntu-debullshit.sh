@@ -152,7 +152,6 @@ replace_desktop() {
                 error_msg 'Invalid input. Skipping desktop install.'
                 ;;
         esac
-    else
     fi
 }
 
