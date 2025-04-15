@@ -47,7 +47,14 @@ cleanup() {
 setup_flathub() {
     apt install flatpak -y
     flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-    apt install --install-suggests gnome-software -y
+}
+
+gnome_software() {
+    apt install -y gnome-software gnome-software-plugin-flatpak
+    read -p "Do you want to install the Snap backend for GNOME Software? (y/n): " choice
+    if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
+        apt install -y gnome-software-plugin-snap
+    fi
 }
 
 gsettings_wrapper() {
@@ -57,54 +64,36 @@ gsettings_wrapper() {
     sudo -Hu $(logname) dbus-launch gsettings "$@"
 }
 
-set_fonts() {
-	gsettings_wrapper set org.gnome.desktop.interface monospace-font-name "Monospace 10"
+remove_ubuntu_desktop() {
+    apt remove ubuntu-session yaru-theme-* gnome-shell-extension-ubuntu-dock -y
 }
 
 setup_vanilla_gnome() {
-    apt install qgnomeplatform-qt5 -y
-    apt install gnome-session fonts-cantarell adwaita-icon-theme gnome-backgrounds gnome-tweaks vanilla-gnome-default-settings gnome-shell-extension-manager -y && apt remove ubuntu-session yaru-theme-gnome-shell yaru-theme-gtk yaru-theme-icon yaru-theme-sound -y
-    set_fonts
-    restore_background
-}
+    apt install qgnomeplatform-qt5 qgnomeplatform-qt6 -y
+    apt install vanilla-gnome-desktop gnome-session -y
 
-restore_background() {
-    gsettings_wrapper set org.gnome.desktop.background picture-uri 'file:///usr/share/backgrounds/gnome/blobs-l.svg'
-    gsettings_wrapper set org.gnome.desktop.background picture-uri-dark 'file:///usr/share/backgrounds/gnome/blobs-l.svg'
-}
-
-setup_julianfairfax_repo() {
-    command -v curl || apt install curl -y
-    curl -s https://julianfairfax.gitlab.io/package-repo/pub.gpg | gpg --dearmor | sudo dd of=/usr/share/keyrings/julians-package-repo.gpg
-    echo 'deb [ signed-by=/usr/share/keyrings/julians-package-repo.gpg ] https://julianfairfax.gitlab.io/package-repo/debs packages main' | sudo tee /etc/apt/sources.list.d/julians-package-repo.list
-    apt update
-}
-
-install_adwgtk3() {    
-    apt install adw-gtk3 -y
-    if command -v flatpak; then
-        flatpak install -y runtime/org.gtk.Gtk3theme.adw-gtk3-dark
-        flatpak install -y runtime/org.gtk.Gtk3theme.adw-gtk3
-    fi
-    if [ "$(gsettings_wrapper get org.gnome.desktop.interface color-scheme | tail -n 1)" == ''\''prefer-dark'\''' ]; then
-        gsettings_wrapper set org.gnome.desktop.interface gtk-theme adw-gtk3-dark
-        gsettings_wrapper set org.gnome.desktop.interface color-scheme prefer-dark
-    else
-        gsettings_wrapper set org.gnome.desktop.interface gtk-theme adw-gtk3
-    fi
-}
-
-install_icons() {
-    wget https://deb.debian.org/debian/pool/main/a/adwaita-icon-theme/adwaita-icon-theme_46.0-1_all.deb -O /tmp/adwaita-icon-theme.deb
-    apt install /tmp/adwaita-icon-theme.deb -y
-    apt install morewaita -y    
+    # Reset gnome settings
+    gsettings reset-recursively org.gnome.desktop.interface
+    gsettings reset-recursively org.gnome.desktop.background
+    gsettings reset-recursively org.gnome.desktop.screensaver
+    gsettings reset-recursively org.gnome.desktop.wm.preferences
+    gsettings reset-recursively org.gnome.shell
+    gsettings reset-recursively org.gnome.nautilus.preferences
+    gsettings reset-recursively org.gnome.nautilus.list-view
+    gsettings reset-recursively org.gnome.desktop.input-sources
+    gsettings reset-recursively org.gnome.desktop.peripherals.keyboard
+    gsettings reset-recursively org.gnome.desktop.interface gtk-theme
+    gsettings reset-recursively org.gnome.desktop.interface icon-theme
+    gsettings reset-recursively org.gnome.desktop.interface font-name
+    gsettings reset-recursively org.gnome.desktop.interface monospace-font-name
+    gsettings reset-recursively org.gnome.desktop.interface cursor-theme
 }
 
 restore_firefox() {
     apt purge firefox -y
     snap remove --purge firefox
     wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- > /etc/apt/keyrings/packages.mozilla.org.asc
-    echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" > /etc/apt/sources.list.d/mozilla.list 
+    echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" > /etc/apt/sources.list.d/mozilla.list
     echo '
 Package: *
 Pin: origin packages.mozilla.org
@@ -112,6 +101,59 @@ Pin-Priority: 1000
 ' > /etc/apt/preferences.d/mozilla
     apt update
     apt install firefox -y
+}
+
+install_kde() {
+    apt install -y kde-plasma-desktop kde-standard kde-config-sddm sddm kde-style-breeze
+
+    echo "sddm" > /etc/X11/default-display-manager
+
+    systemctl disable gdm3 2>/dev/null || true
+    systemctl disable lightdm 2>/dev/null || true
+    systemctl enable sddm
+
+    if [ -f /etc/sddm.conf ]; then
+        sed -i 's/^Current=.*/Current=breeze/' /etc/sddm.conf
+    else
+        mkdir -p /etc/sddm.conf.d
+        cat <<EOF > /etc/sddm.conf.d/kde_settings.conf
+[Theme]
+Current=breeze
+EOF
+    fi
+}
+
+replace_desktop() {
+    echo
+    read -p "Do you want to remove the Ubuntu Desktop (GNOME + Yaru)? (y/n): " rm_ubuntu_desktop
+    if [[ "$rm_ubuntu_desktop" == "y" || "$rm_ubuntu_desktop" == "Y" ]]; then
+        remove_ubuntu_desktop
+
+        echo
+        echo "What desktop environment do you want to install instead?"
+        echo "1 - Vanilla GNOME"
+        echo "2 - KDE Plasma"
+        echo "3 - None"
+        read -p "Enter your choice (1/2/3): " de_choice
+
+        case $de_choice in
+            1)
+                msg 'Installing Vanilla GNOME session'
+                setup_vanilla_gnome
+                ;;
+            2)
+                msg 'Installing KDE Plasma desktop'
+                install_kde
+                ;;
+            3)
+                msg 'No desktop environment will be installed'
+                ;;
+            *)
+                error_msg 'Invalid input. Skipping desktop install.'
+                ;;
+        esac
+    else
+    fi
 }
 
 ask_reboot() {
@@ -148,98 +190,75 @@ check_root_user() {
     fi
 }
 
-print_banner() {
-    echo '                                                                                                                                   
-    ▐            ▗            ▐     ▐       ▝▜  ▝▜      ▐    ▝   ▗   ▗  
-▗ ▗ ▐▄▖ ▗ ▗ ▗▗▖ ▗▟▄ ▗ ▗      ▄▟  ▄▖ ▐▄▖ ▗ ▗  ▐   ▐   ▄▖ ▐▗▖ ▗▄  ▗▟▄  ▐  
-▐ ▐ ▐▘▜ ▐ ▐ ▐▘▐  ▐  ▐ ▐     ▐▘▜ ▐▘▐ ▐▘▜ ▐ ▐  ▐   ▐  ▐ ▝ ▐▘▐  ▐   ▐   ▐  
-▐ ▐ ▐ ▐ ▐ ▐ ▐ ▐  ▐  ▐ ▐  ▀▘ ▐ ▐ ▐▀▀ ▐ ▐ ▐ ▐  ▐   ▐   ▀▚ ▐ ▐  ▐   ▐   ▝  
-▝▄▜ ▐▙▛ ▝▄▜ ▐ ▐  ▝▄ ▝▄▜     ▝▙█ ▝▙▞ ▐▙▛ ▝▄▜  ▝▄  ▝▄ ▝▄▞ ▐ ▐ ▗▟▄  ▝▄  ▐  
-                                                                                                      
- By @polkaulfield
- '
-}
-
 show_menu() {
-    echo 'Choose what to do: '
-    echo '1 - Apply everything (RECOMMENDED)'
+    echo -e ""
+    echo -e "            Ubuntu Debullshit         "
+    echo -e ""
+    echo 'Choose an action:'
+    echo '1 - Apply all optimizations and fixes'
     echo '2 - Disable Ubuntu report'
     echo '3 - Remove app crash popup'
     echo '4 - Remove snaps and snapd'
-    echo '5 - Disable terminal ads (LTS versions)'
-    echo '6 - Install flathub and gnome-software'
-    echo '7 - Install firefox from the Mozilla repo'
-    echo '8 - Install vanilla GNOME session'
-    echo '9 - Install adw-gtk3, morewaita and latest adwaita icons'
+    echo '5 - Disable terminal ads (for LTS versions)'
+    echo '6 - Replace Ubuntu Desktop (with GNOME / KDE / None)'
+    echo '7 - Restore Firefox from the Mozilla repository'
+    echo '8 - Install Flathub and GNOME Software'
     echo 'q - Exit'
+    echo -e ""
     echo
 }
 
 main() {
     check_root_user
     while true; do
-        print_banner
         show_menu
         read -p 'Enter your choice: ' choice
         case $choice in
-        1)
-            auto
-            msg 'Done!'
-            ask_reboot
-            ;;
-        2)
-            disable_ubuntu_report
-            msg 'Done!'
-            ;;
-        3)
-            remove_appcrash_popup
-            msg 'Done!'
-            ;;
-        4)
-            remove_snaps
-            msg 'Done!'
-            ask_reboot
-            ;;
-        5)
-            disable_terminal_ads
-            msg 'Done!'
-            ;;
-        6)
-            update_system
-            setup_flathub
-            msg 'Done!'
-            ask_reboot
-            ;;
-        7)
-            restore_firefox
-            msg 'Done!'
-            ;;
-        8)
-            update_system
-            setup_vanilla_gnome
-            msg 'Done!'
-            ask_reboot
-            ;;
-
-        9)
-            update_system
-            setup_julianfairfax_repo
-            install_adwgtk3
-            install_icons
-            msg 'Done!'
-            ask_reboot
-            ;;
-
-        q)
-            exit 0
-            ;;
-
-        *)
-            error_msg 'Wrong input!'
-            ;;
+            1)
+                auto
+                msg 'All actions completed!'
+                ask_reboot
+                ;;
+            2)
+                disable_ubuntu_report
+                msg 'Ubuntu report disabled!'
+                ;;
+            3)
+                remove_appcrash_popup
+                msg 'App crash popup removed!'
+                ;;
+            4)
+                remove_snaps
+                msg 'Snaps and snapd removed!'
+                ask_reboot
+                ;;
+            5)
+                disable_terminal_ads
+                msg 'Terminal ads disabled!'
+                ;;
+            6)
+                replace_desktop
+                ask_reboot
+                ;;
+            7)
+                restore_firefox
+                msg 'Firefox restored from Mozilla repository!'
+                ;;
+            8)
+                update_system
+                setup_flathub
+                gnome_software
+                msg 'Flathub and GNOME Software installed!'
+                ask_reboot
+                ;;
+            q)
+                exit 0
+                ;;
+            *)
+                error_msg 'Wrong input!'
+                ;;
         esac
     done
-
 }
 
 auto() {
@@ -247,26 +266,20 @@ auto() {
     update_system
     msg 'Disabling ubuntu report'
     disable_ubuntu_report
-    msg 'Removing annoying appcrash popup'
+    msg 'Removing annoying app crash popup'
     remove_appcrash_popup
-    msg 'Removing terminal ads (if they are enabled)'
+    msg 'Disabling terminal ads'
     disable_terminal_ads
-    msg 'Deleting everything snap related'
+    msg 'Removing snaps and snapd'
     remove_snaps
-    msg 'Setting up flathub'
+    msg 'Installing Flathub and GNOME Software'
     setup_flathub
-    msg 'Restoring Firefox from mozilla repository'
+    gnome_software
+    msg 'Restoring Firefox from Mozilla repository'
     restore_firefox
-    msg 'Installing vanilla Gnome session'
-    setup_vanilla_gnome
-    msg 'Adding julianfairfax repo'
-    setup_julianfairfax_repo
-    msg 'Install adw-gtk3 and set dark theme'
-    install_adwgtk3
-    msg 'Installing GNOME 46 and morewaita icons'
-    install_icons
-    msg 'Cleaning up'
+    replace_desktop
     cleanup
+    msg 'Complete!'
 }
 
-(return 2> /dev/null) || main
+main
